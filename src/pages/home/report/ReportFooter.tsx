@@ -26,7 +26,6 @@ import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type * as OnyxTypes from '@src/types/onyx';
 import type {PendingAction} from '@src/types/onyx/OnyxCommon';
-import type {EmptyObject} from '@src/types/utils/EmptyObject';
 import ReportActionCompose from './ReportActionCompose/ReportActionCompose';
 import SystemChatReportFooterMessage from './SystemChatReportFooterMessage';
 
@@ -36,9 +35,6 @@ type ReportFooterProps = {
 
     /** Report metadata */
     reportMetadata?: OnyxEntry<OnyxTypes.ReportMetadata>;
-
-    /** Additional report details */
-    reportNameValuePairs?: OnyxEntry<OnyxTypes.ReportNameValuePairs>;
 
     /** The policy of the report */
     policy: OnyxEntry<OnyxTypes.Policy>;
@@ -70,7 +66,6 @@ function ReportFooter({
     pendingAction,
     report = {reportID: '-1'},
     reportMetadata,
-    reportNameValuePairs,
     policy,
     isEmptyChat = true,
     isReportReadyForDisplay = true,
@@ -99,6 +94,7 @@ function ReportFooter({
             }
         },
     });
+    const [reportNameValuePairs] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS}${report?.reportID ?? -1}`);
 
     const chatFooterStyles = {...styles.chatFooter, minHeight: !isOffline ? CONST.CHAT_FOOTER_MIN_HEIGHT : 0};
     const isArchivedRoom = ReportUtils.isArchivedRoom(report, reportNameValuePairs);
@@ -107,7 +103,7 @@ function ReportFooter({
 
     // If a user just signed in and is viewing a public report, optimistically show the composer while loading the report, since they will have write access when the response comes back.
     const shouldShowComposerOptimistically = !isAnonymousUser && ReportUtils.isPublicRoom(report) && !!reportMetadata?.isLoadingInitialReportActions;
-    const shouldHideComposer = (!ReportUtils.canUserPerformWriteAction(report, reportNameValuePairs) && !shouldShowComposerOptimistically) || isBlockedFromChat;
+    const shouldHideComposer = (!ReportUtils.canUserPerformWriteAction(report) && !shouldShowComposerOptimistically) || isBlockedFromChat;
     const canWriteInReport = ReportUtils.canWriteInReport(report);
     const isSystemChat = ReportUtils.isSystemChat(report);
     const isAdminsOnlyPostingRoom = ReportUtils.isAdminsOnlyPostingRoom(report);
@@ -137,18 +133,18 @@ function ReportFooter({
             const mention = match[1] ? match[1].trim() : undefined;
             const mentionWithDomain = ReportUtils.addDomainToShortMention(mention ?? '') ?? mention;
 
-            let assignee: OnyxTypes.PersonalDetails | EmptyObject = {};
+            let assignee: OnyxEntry<OnyxTypes.PersonalDetails>;
             let assigneeChatReport;
             if (mentionWithDomain) {
-                assignee = Object.values(allPersonalDetails).find((value) => value?.login === mentionWithDomain) ?? {};
-                if (!Object.keys(assignee).length) {
+                assignee = Object.values(allPersonalDetails).find((value) => value?.login === mentionWithDomain) ?? undefined;
+                if (!Object.keys(assignee ?? {}).length) {
                     const assigneeAccountID = UserUtils.generateAccountID(mentionWithDomain);
                     const optimisticDataForNewAssignee = Task.setNewOptimisticAssignee(mentionWithDomain, assigneeAccountID);
                     assignee = optimisticDataForNewAssignee.assignee;
                     assigneeChatReport = optimisticDataForNewAssignee.assigneeReport;
                 }
             }
-            Task.createTaskAndNavigate(report.reportID, title, '', assignee?.login ?? '', assignee.accountID, assigneeChatReport, report.policyID);
+            Task.createTaskAndNavigate(report.reportID, title, '', assignee?.login ?? '', assignee?.accountID, assigneeChatReport, report.policyID);
             return true;
         },
         [allPersonalDetails, report.policyID, report.reportID],
@@ -162,7 +158,7 @@ function ReportFooter({
             }
             Report.addComment(report.reportID, text);
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-compiler/react-compiler, react-hooks/exhaustive-deps
         [report.reportID, handleCreateTask],
     );
 
